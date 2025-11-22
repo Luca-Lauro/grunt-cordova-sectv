@@ -421,5 +421,41 @@ module.exports = {
                 }
             }
         });
+    },
+    deploy: function (successCallback, errorCallback, data) {   // WebOS CLI
+        console.log('\nStart deploying WebOS Smart TV Platform apps......');
+
+        var { spawn } = require('child_process');
+        var ipkPath = data.ipkPath || './platform/webos/build/app.ipk';
+        var device = data.device || 'emulator';
+
+        var userConfPath = path.join('platforms', 'userconf.json');
+
+        var projectName = 'package';
+
+        if(fs.existsSync(userConfPath)){
+            var userData = JSON.parse(fs.readFileSync(userConfPath));
+
+            if(userData.hasOwnProperty('orsay')){
+                projectName = userData.orsay.name;
+            }
+        }
+        else {
+            grunt.log.error('Prepare and Build the project first.');
+        }
+        
+        var proc = spawn('ares-install', ['--device', device, ipkPath]);
+
+        proc.stdout.on('data', d => grunt.log.write(d.toString()));
+        proc.stderr.on('data', d => grunt.log.error(d.toString()));
+        proc.on('close', code => {
+            if (code === 0) {
+                grunt.log.ok('WebOS app deployed successfully.');
+                successCallback && successCallback();
+            } else {
+                grunt.log.error('WebOS app deployment failed.');
+                errorCallback && errorCallback();
+            }
+        });
     }
 };

@@ -368,5 +368,40 @@ module.exports = {
                 }
             }
         });
+    },
+    deploy: function (successCallback, errorCallback, data) {   // Smart Developement Bridge
+        console.log('\nStart deploying Tizen Samsung Smart TV Platform apps......');
+
+        var { spawn } = require('child_process');
+        var wgtPath = data.wgtPath || './platform/tizen/build/app.wgt';
+
+        var userConfPath = path.join('platforms', 'userconf.json');
+
+        var projectName = 'package';
+
+        if(fs.existsSync(userConfPath)){
+            var userData = JSON.parse(fs.readFileSync(userConfPath));
+
+            if(userData.hasOwnProperty('orsay')){
+                projectName = userData.orsay.name;
+            }
+        }
+        else {
+            grunt.log.error('Prepare and Build the project first.');
+        }
+        
+        var proc = spawn('sdb', ['install', wgtPath]);
+
+        proc.stdout.on('data', d => grunt.log.write(d.toString()));
+        proc.stderr.on('data', d => grunt.log.error(d.toString()));
+        proc.on('close', code => {
+            if (code === 0) {
+                grunt.log.ok('Tizen app deployed successfully.');
+                successCallback && successCallback();
+            } else {
+                grunt.log.error('Tizen app deployment failed.');
+                errorCallback && errorCallback();
+            }
+        });
     }
 };

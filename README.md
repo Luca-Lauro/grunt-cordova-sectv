@@ -39,6 +39,48 @@ It provides several grunt task:
         }
         ```
 
+-   `sectv-deploy`: Deploys packaged (`.zip` or `.wgt`) Cordova apps to supported smart tv platforms through their relative deploy methods.
+
+    -   Options for the task:
+
+        ```js
+        'sectv-deploy': {  // task
+            'sectv-orsay': {    // target
+                dest: 'platforms/sectv-orsay/build/',   // Path to use for host server root
+                id: 'app',                              // Widget Identifier
+                port: '80',                             // Port of the host server (default 80)
+                zipName: 'app.zip'                          // Name of the packaged app archive
+                /*
+                    After the host server has started, boot up your TV in developer mode, point it at the correct IP address, and sync your apps.
+                */
+            },
+            'sectv-tizen': {
+                wgtPath: 'app.wgt',     // Path of the packaged widget
+                /*
+                    Deployment is performed via: 'sdb install <buildfolder>/<wgtName>'
+                */
+            },
+            'tv-webos': {
+                ipkPath: 'platform/webos/build/app.ipk',            // Path of the packaged app archive
+                device: 'emulator',                                 // Target device name
+                /*
+                    Deployment is performed via: ares-install --device <device> <buildfolder>/<ipkName>
+                */
+            }
+        }
+        ```
+
+When deploying to Samsung Orsay TVs via HTTP, the device expects a specific folder layout and manifest file:
+<server-root>/
+├── widgetlist.xml
+└── Widget/
+    └── app.zip
+
+- widgetlist.xml must reside in the server root and describe the available widget(s).
+- The actual app package (app.zip) must be placed inside the Widget/ subdirectory.
+- The <download> field in widgetlist.xml must point to http://<host-ip>/Widget/app.zip.
+This structure allows Orsay TVs in developer mode to retrieve and install the app over the network without proprietary tools.
+
 # Associated Projects
 
 -   [cordova-sectv-orsay](http://github.com/Samsung/cordova-sectv-orsay) is an application library that allows for [Cordova](http://cordova.apache.org)-based projects to be built for the Legacy Samsung Smart TV (A.K.A Orsay) Platform.

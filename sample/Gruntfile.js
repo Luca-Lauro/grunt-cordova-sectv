@@ -61,6 +61,17 @@ module.exports = function(grunt) {
                 www: 'platforms/tv-webos/www',
                 dest: 'platforms/tv-webos/build'
             }
+        },
+        'sectv-deploy': {
+            'sectv-orsay': {
+                dest: 'platforms/sectv-orsay/build'
+            },
+            'sectv-tizen': {
+                dest: 'platforms/sectv-tizen/build'
+            },
+            'tv-webos': {
+                dest: 'platforms/tv-webos/build'
+            }
         }
     });
 
@@ -76,6 +87,7 @@ module.exports = function(grunt) {
         'jshint',
         'clean',
         'sectv-prepare',
-        'sectv-build'
+        'sectv-build',
+        'sectv-deploy'
     ]);
 };

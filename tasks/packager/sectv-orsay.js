@@ -25,7 +25,9 @@ var shelljs = require('shelljs');
 var mustache = require('mustache');
 var grunt = require('grunt');
 var zipdir = require('zip-dir');
-var js2xmlparser =  require('js2xmlparser');
+var xml2js = require('xml2js');
+var os = require('os');
+var express = require('express');
 
 var revLen = 3;
 
@@ -316,14 +318,19 @@ function prepareDir(dir) {
     mkdirp.sync(dir);
 }
 
-function getManualOrsayConfData(platformsData){
-    var i,
-        manualOrsayConfData = null;
+function getManualOrsayConfData(platformsData) {
+    var manualOrsayConfData = null;
+    var builder = new xml2js.Builder({
+        headless: true,
+        renderOpts: { pretty: false }
+    });
+
     if (platformsData) {
-        for (i=0; i < platformsData.length; i++) {
+        for (var i = 0; i < platformsData.length; i++) {
             if (platformsData[i].$.name === 'sectv-orsay') {
                 delete platformsData[i].$;
-                manualOrsayConfData = utils.trim(js2xmlparser('platform',platformsData[i],{declaration : {include : false},attributeString : '$'}).replace(/<(\/?platform)>/igm,''));
+                var xml = builder.buildObject(platformsData[i]);
+                manualOrsayConfData = utils.trim(xml);
             }
         }
     }
@@ -493,5 +500,149 @@ module.exports = {
                 successCallback && successCallback();
             });
         });
+    },
+    deploy: function (successCallback, errorCallback, data) {  // HTTP host server + widgetlist.xml
+        console.log('\nStart deploying Legacy Samsung Smart TV Platform apps......');
+        var dest = data.dest || path.join('platforms', 'sectv-orsay', 'build');
+        dest = path.resolve(dest);
+        var serverRoot = data.serverRoot || '../serverRoot';
+        serverRoot = path.resolve(serverRoot)
+        var port = data.port || 80;
+
+        var userConfPath = path.join('platforms', 'userconf.json');
+
+        var projectName = 'package';
+
+        if(fs.existsSync(userConfPath)){
+            var userData = JSON.parse(fs.readFileSync(userConfPath));
+
+            if(userData.hasOwnProperty('orsay')){
+                projectName = userData.orsay.name;
+            }
+        }
+        else {
+            grunt.log.error('Prepare and Build the project first.');
+        }
+        
+        var appId = data.id || projectName;
+        var zipName = data.zipName || projectName + '.zip';
+
+        arrangeFolders(serverRoot, function (err) {
+            if (err) {
+                grunt.log.error(err);
+                errorCallback && errorCallback(err);
+                return;
+            }
+
+            updateWidgetList(serverRoot, function (err) {
+                if (err) {
+                    grunt.log.error(err);
+                    errorCallback && errorCallback(err);
+                    return;
+                }
+
+                startServer(serverRoot, port);
+                grunt.log.ok(`Host Server started at ${serverRoot}`);
+                successCallback && successCallback();
+            });
+        });
+
+        function getNetworkIp() {
+            var interfaces = os.networkInterfaces();
+            for (var name of Object.keys(interfaces)) {
+                for (var intf of interfaces[name]) {
+                    if (intf.family === 'IPv4' && !intf.internal) {
+                        return intf.address;
+                    }
+                }
+            }
+            return '127.0.0.1';
+        }
+
+        function arrangeFolders(serverRoot, cb) {
+            fs.mkdir(path.join(serverRoot, 'Widget'), { recursive: true }, function (err) {
+                if (err) return cb(err);
+
+                var srcZip = path.join(dest, zipName);
+                var destZip = path.join(serverRoot, 'Widget', zipName);
+
+                fs.copyFile(srcZip, destZip, function (err) {
+                    if (err) return cb(err);
+                    grunt.log.ok(`Copied ${zipName} to ${destZip}`);
+                    cb(null);
+                });
+            });
+        }
+
+        function updateWidgetList(serverRoot, cb) {
+            var xmlPath = path.resolve(path.join(serverRoot, 'widgetlist.xml'));
+            var builder = new xml2js.Builder({ headless: false, renderOpts: { pretty: true } });
+
+            if (fs.existsSync(xmlPath)) {
+                var existing = fs.readFileSync(xmlPath, 'utf8');
+                var parser = new xml2js.Parser({ explicitArray: false });
+
+                parser.parseString(existing, (err, obj) => {
+                    if (err) return cb(err);
+
+                    if (!obj.rsp) obj.rsp = { $: { stat: 'ok' }, list: { widget: [] } };
+                    if (!obj.rsp.list) obj.rsp.list = { widget: [] };
+                    if (!Array.isArray(obj.rsp.list.widget)) {
+                        obj.rsp.list.widget = obj.rsp.list.widget ? [obj.rsp.list.widget] : [];
+                    }
+
+                    obj.rsp.list.widget.push({
+                        $: { id: appId },
+                        title: projectName,
+                        compression: { $: { size: '12345', type: 'zip' } },
+                        description: 'My Samsung Application -- Description',
+                        download: `http://${getNetworkIp()}/Widget/${zipName}`
+                    });
+
+                    var xml = builder.buildObject(obj);
+                    fs.writeFile(xmlPath, xml, err => {
+                        if (err) return cb(err);
+                        grunt.log.ok(`Updated manifest at ${xmlPath}`);
+                        cb(null);
+                    });
+                });
+            } else {
+                var obj = {
+                    rsp: {
+                        $: { stat: 'ok' },
+                        list: {
+                            widget: [{
+                                $: { id: appId },
+                                title: projectName,
+                                compression: { $: { size: '12345', type: 'zip' } },
+                                description: 'My Samsung Application -- Description',
+                                download: `http://${getNetworkIp()}/Widget/${zipName}`
+                            }]
+                        }
+                    }
+                };
+
+                var xml = builder.buildObject(obj);
+                fs.writeFile(xmlPath, xml, err => {
+                    if (err) return cb(err);
+                    grunt.log.ok(`Created new manifest at ${xmlPath}`);
+                    cb(null);
+                });
+            }
+        }
+
+        function startServer(serverRoot, port) {
+            var app = express();
+            app.all('*', (req, res, next) => {
+                res.header('Access-Control-Allow-Origin', '*');
+                res.header('Access-Control-Allow-Headers', 'X-Requested-With');
+                next();
+            });
+            app.use(express.static(serverRoot));
+            app.listen(port, () => {
+                grunt.log.ok(`Server root at ${serverRoot}/`);
+                grunt.log.ok(`Server running at http://${getNetworkIp()}:${port}/`);
+            });
+        }
     }
 };
