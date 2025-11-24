@@ -591,18 +591,31 @@ module.exports = {
                         obj.rsp.list.widget = obj.rsp.list.widget ? [obj.rsp.list.widget] : [];
                     }
 
-                    obj.rsp.list.widget.push({
+                    // Search if there is already a widget with the same id
+                    var existingIndex = obj.rsp.list.widget.findIndex(w => w.$.id === appId);
+
+                    var newWidget = {
                         $: { id: appId },
                         title: projectName,
                         compression: { $: { size: '12345', type: 'zip' } },
-                        description: 'My Samsung Application -- Description',
+                        description: 'My TOAST App -- Description',
                         download: `http://${getNetworkIp()}/Widget/${zipName}`
-                    });
+                    };
+
+                    if (existingIndex >= 0) {
+                        // Update existing
+                        obj.rsp.list.widget[existingIndex] = newWidget;
+                        grunt.log.ok(`Updated existing widget ${appId}`);
+                    } else {
+                        // Add new
+                        obj.rsp.list.widget.push(newWidget);
+                        grunt.log.ok(`Added new widget ${appId}`);
+                    }
 
                     var xml = builder.buildObject(obj);
                     fs.writeFile(xmlPath, xml, err => {
                         if (err) return cb(err);
-                        grunt.log.ok(`Updated manifest at ${xmlPath}`);
+                        grunt.log.ok(`Manifest written at ${xmlPath}`);
                         cb(null);
                     });
                 });
